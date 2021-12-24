@@ -15,6 +15,23 @@ var clothNormalBuffer;
 var clothTriangleBuffer;
 
 
+// Cloth simulation variables
+var spring_start = [];
+var spring_end = [];
+var spring_rest = [];
+
+var time; // variable that counts the time in milliseconds from the initialization of the mass spring system
+var v = []; // velocities of the cloth vertices
+var f = []; // forces acting on individual cloth vertices (gravity + springs + any external)
+
+var gravity = 9.8;
+var mass = 0.1;
+var damping = 1.0;
+var k = 300; // stiffness coefficient of every spring
+
+var deltaT = 0.001; // time step for simulation
+
+
 /**
  * Function to initialize the WebGL context.
  */
@@ -35,6 +52,7 @@ function initWebGL() {
 
 /**
  * Function to compile the shader.
+ * 
  * @param shader The shader to compile
  * @param source The source of the shader
  * @param type The type of the shader
@@ -58,11 +76,12 @@ function compileShader(shader, source, type, name = "") {
 /**
  * Function to link the GLSL program by combining the vertex and
  * fragment shaders.
+ * 
  * @param program The GLSL program
  * @param vertShader The vertex shader
  * @param fragShader The fragment shader
  */
- function linkProgram(program, vertShader, fragShader) {
+function linkProgram(program, vertShader, fragShader) {
   gl.attachShader(program, vertShader);
   gl.attachShader(program, fragShader);
 
@@ -76,6 +95,9 @@ function compileShader(shader, source, type, name = "") {
 }
 
 
+/**
+ * Function to initialize the shaders for the scene.
+ */
 function initShaders() {
   let vertShader = gl.createShader(gl.VERTEX_SHADER);
   compileShader(vertShader, vertexShaderCode, gl.VERTEX_SHADER, "Vertex");
@@ -106,52 +128,12 @@ function createGLSLProgram(program, vertCode, fragCode) {
   linkProgram(program, vertexShader, fragmentShader);
 }
 
-function createGLSLPrograms() {
-  shaderProgram = gl.createProgram();
-  createGLSLProgram(shaderProgram, vertexShaderCode, fragmentShaderCode);
-
-  terrainShaderProgram = gl.createProgram();
-  createGLSLProgram(terrainShaderProgram, terrainVertexShaderCode, terrainFragmentShaderCode);
-}
-
-
-function createVAO(vao, shader, vertices, colors, normals) {
-  let vertexBuffer = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
-
-  let colorBuffer = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.STATIC_DRAW);
-
-  let normalBuffer = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(normals), gl.STATIC_DRAW);
-
-  gl.bindVertexArray(vao);
-
-  gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
-  let positionAttributeLocation = gl.getAttribLocation(shader, "a_position");
-  gl.enableVertexAttribArray(positionAttributeLocation);
-  gl.vertexAttribPointer(positionAttributeLocation, 3, gl.FLOAT, false, 0, 0);
-
-  gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
-  let colorAttributeLocation = gl.getAttribLocation(shader, "a_color");
-  gl.enableVertexAttribArray(colorAttributeLocation);
-  gl.vertexAttribPointer(colorAttributeLocation, 3, gl.FLOAT, false, 0, 0);
-
-  gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
-  let normalAttributeLocation = gl.getAttribLocation(shader, "a_normal");
-  gl.enableVertexAttribArray(normalAttributeLocation);
-  gl.vertexAttribPointer(normalAttributeLocation, 3, gl.FLOAT, false, 0, 0);
-}
-
 
 /**
  * Function to initialize the buffers.
  */
 function initBuffers() {
-  // cloth
+  // Cloth buffer initialization
   clothVertexBuffer = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, clothVertexBuffer);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cloth_vertices), gl.DYNAMIC_DRAW);
@@ -173,7 +155,7 @@ function initBuffers() {
   gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 0, 0);
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, clothTriangleBuffer);
 
-  // terrain
+  // Terrain buffer initialization
   terrainVertexBuffer = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, terrainVertexBuffer);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(terrain_vertices), gl.STATIC_DRAW);
@@ -193,25 +175,48 @@ function initBuffers() {
 }
 
 
+/**
+ * Draw the arrays to the screen.
+ * 
+ * @param vao The vertex array object
+ * @param program The GLSL program
+ * @param num The number of vertices
+ * @param modelMatrix The model matrix
+ */
 function my_drawArray(vao, program, num, modelMatrix) {
   gl.uniformMatrix4fv(program.modelMatrixUniform, false, modelMatrix);
   gl.bindVertexArray(vao);
   gl.drawArrays(gl.TRIANGLES, 0, num);
 }
 
+
+/**
+ * Draw the elements to the screen.
+ * 
+ * @param vao The vertex array object
+ * @param program The GLSL program
+ * @param num The number of vertices
+ * @param modelMatrix The model matrix
+ */
 function my_drawElements(vao, program, num, modelMatrix) {
   gl.uniformMatrix4fv(program.modelMatrixUniform, false, modelMatrix);
   gl.bindVertexArray(vao);
   gl.drawElements(gl.TRIANGLES, num, gl.UNSIGNED_INT, 0);
 }
 
+
+/**
+ * Function to draw the geometry.
+ * 
+ * @param program The GLSL program
+ */
 function drawGeometry(program) {
   let modelMatrix = mat4.create();
   mat4.identity(modelMatrix);
-  //draw terrain (flat plane)
+  
   mat4.fromTranslation(modelMatrix, vec3.fromValues(0.0, -1.0, 0.0));
   my_drawArray(terrain_vao, program, terrain_vertices.length / 3, modelMatrix);
-  //draw cloth
+  
   mat4.fromTranslation(modelMatrix, vec3.fromValues(0.0, 1.0, -1.0));
   gl.disable(gl.CULL_FACE);
   my_drawElements(cloth_vao, program, cloth_triangles.length, modelMatrix);
@@ -262,22 +267,6 @@ function draw() {
 
   drawGeometry(shaderProgram);
 }
-
-
-var spring_start = []; // the i-th element contains the index of the vertex which starts the i-th spring
-var spring_end = []; // the i-th element contains the index of the vertex which ends the i-th spring
-var spring_rest = []; // the i-th element contains the rest length of the i-th spring
-
-var time; // variable that counts the time in milliseconds from the initialization of the mass spring system
-var v = []; // velocities of the cloth vertices
-var f = []; // forces acting on individual cloth vertices (gravity + springs + any external)
-
-var gravity = 9.80665;
-var mass = 0.1; // mass of every vertex
-var damping = 1.0; // damping coefficient of every spring
-var k = 30; // stiffness coefficient of every spring
-
-var deltaT = 0.001; // time step for simulation
 
 
 // the function initialized the topology of the mass-spring system
@@ -331,25 +320,22 @@ function updateNormals() {
   // Remember that every three consecutive values stored in cloth_normals/cloth_vertices correspond
   // to per-vertex normal/position
 
-
-
-
-  // The three lines below will make sure that the buffer on the GPU,
-  // which stores the normal vectors will be updated.
   gl.bindBuffer(gl.ARRAY_BUFFER, clothNormalBuffer);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cloth_normals), gl.DYNAMIC_DRAW);
   gl.bindBuffer(gl.ARRAY_BUFFER, null);
 }
 
 
+/**
+ * Function that updates the position of the cloth's vertices.
+ */
 function updateCloth() {
-
-  // initializing forces for every particle with gravity and any external forces
+  // Initialization of the mass-spring system
   for (let i = 0; i < cloth_size * cloth_size; i++) {
-    f[i] = gravity;
+    f[i] = vec3.fromValues(0.0, -gravity, 0.0);
   }
 
-  // computing the forces exerted by every spring and adding them to the forces acting on particles
+  // Computing forces acting on every spring in the system and adding them to the corresponding particles
   for (let i = 0; i < spring_start.length; i++) {
     let p = spring_start[i]; // index of the particle/vertex which corresponds to one end of the spring
     let q = spring_end[i]; // index of the particle/vertex which corresponds to one end of the spring
@@ -358,46 +344,65 @@ function updateCloth() {
     let x_p = vec3.fromValues(cloth_vertices[3 * p], cloth_vertices[3 * p + 1], cloth_vertices[3 * p + 2]);
     let x_q = vec3.fromValues(cloth_vertices[3 * q], cloth_vertices[3 * q + 1], cloth_vertices[3 * q + 2]);
 
-    // Compute forces exert by the spring and the damping forces
-    // Use the computed forces to update f[p] and f[q], i.e., accumulated forces which act on the particles
-    let hooke = k * (vec3.length(x_q - x_p) / spring_rest[i]) * ((x_q - x_p) / vec3.length(x_q - x_p));
-    // console.log(hooke)
-    let damping_factor = damping
+    let vec_length = vec3.subtract(vec3.create(), x_q, x_p);
+    let length = vec3.length(vec_length);
+    let strain = k * ((length / spring_rest[i]) - 1.0);
+    let vec_length_norm = vec3.scale(vec3.create(), vec_length, 1 / length);
+
+    let vec_velocity = vec3.subtract(vec3.create(), v[q], v[p]);
+    let relative_velocity = vec3.scale(vec3.create(), vec_velocity, 1 / spring_rest[i]);
+    let velocity = damping * vec3.dot(relative_velocity, vec_length_norm);
+
+    let hooke_p = vec3.scale(vec3.create(), vec_length_norm, strain);
+    let hooke_q = vec3.scale(vec3.create(), hooke_p, -1.0);
+
+    let damping_p = vec3.scale(vec3.create(), vec_length_norm, velocity);
+    let damping_q = vec3.scale(vec3.create(), damping_p, -1.0);
+
+    let force_p = vec3.add(vec3.create(), hooke_p, damping_p);
+    let force_q = vec3.add(vec3.create(), hooke_q, damping_q);
+
+    // Sum the forces acting on the two ends of the spring
+    f[p] = vec3.add(vec3.create(), f[p], force_p);
+    f[q] = vec3.add(vec3.create(), f[q], force_q);
   }
 
-  // updating position an velocities of the particles based on forces and masses
+  // Updating the velocities of the particles based on the forces acting on them
   for (let i = 0; i < cloth_size * cloth_size; i++) {
     if (i !== 0 && i !== cloth_size - 1) {
-      // Here update the velocity and position of every particle
+      let vec_deltaT = vec3.fromValues(deltaT, deltaT, deltaT);
+      let vec_mass = vec3.fromValues(mass, mass, mass);
 
-      // let velocity = deltaT * (f[i] / mass)
+      let quotient = vec3.divide(vec3.create(), vec_deltaT, vec_mass);
+      let velocity = vec3.multiply(vec3.create(), f[i], quotient);
 
-      // // velocity of i-th particle
-      // v[i][0] += velocity;
-      // v[i][1] += velocity;
-      // v[i][2] += velocity;
+      // Velocity of i-th particle
+      v[i][0] += velocity[0];
+      v[i][1] += velocity[1];
+      v[i][2] += velocity[2];
 
-      // let position = deltaT * v[i]
+      let position = vec3.multiply(vec3.create(), vec_deltaT, v[i]);
 
-      // // position of i-th particle
-      // cloth_vertices[3*i] += position.x
-      // cloth_vertices[3*i+1] += position.y
-      // cloth_vertices[3*i+2] += position.z
+      // Position of i-th particle
+      cloth_vertices[3 * i] += position[0];
+      cloth_vertices[3 * i + 1] += position[1];
+      cloth_vertices[3 * i + 2] += position[2];
     }
   }
 
-  // The three lines below will make sure that the buffer on the GPU,
-  // which stores the positions of particles, will be updated.
   gl.bindBuffer(gl.ARRAY_BUFFER, clothVertexBuffer);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cloth_vertices), gl.DYNAMIC_DRAW);
   gl.bindBuffer(gl.ARRAY_BUFFER, null);
 }
 
 
+/**
+ * Function that runs the simulation.
+ */
 function run() {
   draw();
 
-  var num_substeps = 1.0 / 60 / deltaT;
+  var num_substeps = 1.0 / 120 / deltaT;
 
   for (let i = 0; i < num_substeps; i++) {
     updateCloth();
@@ -408,7 +413,10 @@ function run() {
 }
 
 
-function start() {
+/**
+ * Function that starts the application.
+ */
+function main() {
   initWebGL();
   initShaders();
   initBuffers();
@@ -416,9 +424,5 @@ function start() {
   run();
 }
 
-
-function main() {
-  start();
-}
 
 export default main;
