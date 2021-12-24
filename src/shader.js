@@ -332,7 +332,10 @@ function updateNormals() {
 function updateCloth() {
   // Initialization of the mass-spring system
   for (let i = 0; i < cloth_size * cloth_size; i++) {
-    f[i] = vec3.fromValues(0.0, -gravity, 0.0);
+    let curr_time = ((Date.now() - time) / 200) * Math.random(10, 20);
+    curr_time = curr_time <= 30 ? curr_time : 30 * Math.random(10, 20);
+
+    f[i] = vec3.fromValues(0.0, -gravity, curr_time);
   }
 
   // Computing forces acting on every spring in the system and adding them to the corresponding particles
@@ -367,27 +370,33 @@ function updateCloth() {
     f[q] = vec3.add(vec3.create(), f[q], force_q);
   }
 
+  var anchor_one = document.getElementById("anchor_one");
+  var anchor_two = document.getElementById("anchor_two");
+  var anchor_three = document.getElementById("anchor_three");
+
   // Updating the velocities of the particles based on the forces acting on them
   for (let i = 0; i < cloth_size * cloth_size; i++) {
-    if (i !== 0 && i !== cloth_size - 1) {
-      let vec_deltaT = vec3.fromValues(deltaT, deltaT, deltaT);
-      let vec_mass = vec3.fromValues(mass, mass, mass);
+    if (anchor_one.checked && i === 0) continue;
+    if (anchor_two.checked && i === cloth_size / 2 - 1) continue;
+    if (anchor_three.checked && i === cloth_size - 1) continue;
 
-      let quotient = vec3.divide(vec3.create(), vec_deltaT, vec_mass);
-      let velocity = vec3.multiply(vec3.create(), f[i], quotient);
+    let vec_deltaT = vec3.fromValues(deltaT, deltaT, deltaT);
+    let vec_mass = vec3.fromValues(mass, mass, mass);
 
-      // Velocity of i-th particle
-      v[i][0] += velocity[0];
-      v[i][1] += velocity[1];
-      v[i][2] += velocity[2];
+    let quotient = vec3.divide(vec3.create(), vec_deltaT, vec_mass);
+    let velocity = vec3.multiply(vec3.create(), f[i], quotient);
 
-      let position = vec3.multiply(vec3.create(), vec_deltaT, v[i]);
+    // Velocity of i-th particle
+    v[i][0] += velocity[0];
+    v[i][1] += velocity[1];
+    v[i][2] += velocity[2];
 
-      // Position of i-th particle
-      cloth_vertices[3 * i] += position[0];
-      cloth_vertices[3 * i + 1] += position[1];
-      cloth_vertices[3 * i + 2] += position[2];
-    }
+    let position = vec3.multiply(vec3.create(), vec_deltaT, v[i]);
+
+    // Position of i-th particle
+    cloth_vertices[3 * i] += position[0];
+    cloth_vertices[3 * i + 1] += position[1];
+    cloth_vertices[3 * i + 2] += position[2];
   }
 
   gl.bindBuffer(gl.ARRAY_BUFFER, clothVertexBuffer);
