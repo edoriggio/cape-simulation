@@ -27,7 +27,7 @@ var f = []; // forces acting on individual cloth vertices (gravity + springs + a
 var gravity = 9.8;
 var mass = 0.1;
 var damping = 1.0;
-var k = 300; // stiffness coefficient of every spring
+var k = 30; // stiffness coefficient of every spring
 
 var deltaT = 0.001; // time step for simulation
 
@@ -312,13 +312,37 @@ function initMassSpringSystem() {
 }
 
 
+/**
+ * Function that updates the normal vectors of the cloth.
+ */
 function updateNormals() {
+  for (let i = 0; i < cloth_triangles.length; i += 3) {
+    let i1 = cloth_triangles[i];
+    let i2 = cloth_triangles[i + 1];
+    let i3 = cloth_triangles[i + 2];
 
-  // ------------ Assignment ------------
-  // Impement this funciton to update per-vertex normal vectors of the cloth.
-  // More precisly, the function should update cloth_normals array based on cloth_vertices array.
-  // Remember that every three consecutive values stored in cloth_normals/cloth_vertices correspond
-  // to per-vertex normal/position
+    let v1 = vec3.fromValues(cloth_vertices[3 * i1], cloth_vertices[3 * i1 + 1], cloth_vertices[3 * i1 + 2]);
+    let v2 = vec3.fromValues(cloth_vertices[3 * i2], cloth_vertices[3 * i2 + 1], cloth_vertices[3 * i2 + 2]);
+    let v3 = vec3.fromValues(cloth_vertices[3 * i3], cloth_vertices[3 * i3 + 1], cloth_vertices[3 * i3 + 2]);
+
+    let s1 = vec3.subtract(vec3.create(), v2, v1);
+    let s2 = vec3.subtract(vec3.create(), v3, v1);
+
+    let n = vec3.cross(vec3.create(), s1, s2);
+    vec3.normalize(n, n);
+
+    cloth_normals[3 * i1] = n[0];
+    cloth_normals[3 * i1 + 1] = n[1];
+    cloth_normals[3 * i1 + 2] = n[2];
+
+    cloth_normals[3 * i2] = n[0];
+    cloth_normals[3 * i2 + 1] = n[1];
+    cloth_normals[3 * i2 + 2] = n[2];
+
+    cloth_normals[3 * i3] = n[0];
+    cloth_normals[3 * i3 + 1] = n[1];
+    cloth_normals[3 * i3 + 2] = n[2];
+  }
 
   gl.bindBuffer(gl.ARRAY_BUFFER, clothNormalBuffer);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cloth_normals), gl.DYNAMIC_DRAW);
@@ -335,7 +359,7 @@ function updateCloth() {
     let curr_time = ((Date.now() - time) / 200) * Math.random(10, 20);
     curr_time = curr_time <= 30 ? curr_time : 30 * Math.random(10, 20);
 
-    f[i] = vec3.fromValues(0.0, -gravity, curr_time);
+    f[i] = vec3.scale(vec3.create(), vec3.fromValues(0.0, -gravity, curr_time), mass);
   }
 
   // Computing forces acting on every spring in the system and adding them to the corresponding particles
@@ -411,7 +435,7 @@ function updateCloth() {
 function run() {
   draw();
 
-  var num_substeps = 1.0 / 120 / deltaT;
+  var num_substeps = 1.0 / 60 / deltaT;
 
   for (let i = 0; i < num_substeps; i++) {
     updateCloth();
